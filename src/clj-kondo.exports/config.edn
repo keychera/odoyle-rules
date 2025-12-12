@@ -1,0 +1,3 @@
+{:linters {:odoyle/reserved   {:level :warning}
+           :odoyle/hook-error {:level :error}}
+ :hooks   {:analyze-call {odoyle.rules/ruleset odoyle.hooks/ruleset-hook}}}
