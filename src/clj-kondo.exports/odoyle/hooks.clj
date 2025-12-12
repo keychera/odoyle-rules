@@ -5,12 +5,12 @@
 (def rule-delimiter #{:what :when :then :then-finally})
 (def reserved-syms  #{'session 'match})
 
-(defn let-one-and-fake-use [sym-nodes faker]
+(defn let-one-and-fake-use [sym-nodes]
   (let [per-symbol-def (transduce (map #(map-indexed vector %)) concat (vals (group-by api/sexpr sym-nodes)))
         let-symbols    (transduce
                         (map (fn [[idx node]]
                                (if (= idx 0)
-                                 [node (api/token-node faker) (api/token-node '_) (api/token-node (api/sexpr node))]
+                                 [node (api/token-node '[]) (api/token-node '_) (api/token-node (api/sexpr node))]
                                  [(api/token-node '_) node])))
                         concat per-symbol-def)]
     (into [] let-symbols)))
@@ -39,24 +39,29 @@
                                    :col (:col (meta reserved-node))
                                    :message "reserved symbol usage in :what block!"
                                    :type    :odoyle/reserved}))
-                sym-nodes      (let-one-and-fake-use sym-nodes '[])
+                sym-nodes      (let-one-and-fake-use sym-nodes)
                 keyword-nodes  (into [] (filter (comp keyword? api/sexpr)) what-nodes)
                 keyword-nodes  (conj keyword-nodes rule-name-node)
-                reserved-nodes (let-one-and-fake-use (into [] (map api/token-node) reserved-syms) '[])]
+                session-scope  (let-one-and-fake-use [(api/token-node 'session)])
+                match-scope    (let-one-and-fake-use [(api/token-node 'match)])]
             (api/list-node
              (list*
               (api/token-node 'let)
-              (api/vector-node (conj reserved-nodes
+              (api/vector-node (conj session-scope
                                      (api/token-node '_)
                                      (api/list-node (list* (api/token-node 'vector) keyword-nodes))))
               (api/list-node (list (api/token-node 'prn) (api/token-node :separator)))
               (api/list-node
-               (list*
-                (api/token-node 'let)
-                (api/vector-node (cond-> sym-nodes
-                                   when-block (conj (api/token-node '_)
-                                                    (api/list-node (list* (api/token-node 'vector) when-block)))))
-                then-block))
+               (list
+                (api/token-node 'let) 
+                (api/vector-node match-scope)
+                (api/list-node
+                 (list*
+                  (api/token-node 'let)
+                  (api/vector-node (cond-> sym-nodes
+                                     when-block (conj (api/token-node '_)
+                                                      (api/list-node (list* (api/token-node 'vector) when-block)))))
+                  then-block))))
               then-finally-block)))))
    (partition 2 (:children ruleset-node))))
 
@@ -70,5 +75,5 @@
       (api/reg-finding!
        {:row (:row (meta node))
         :col (:col (meta node))
-        :message (str "hook error:" (.getCause e))
+        :message (str "hook error: " e)
         :type    :odoyle/hook-error}))))
