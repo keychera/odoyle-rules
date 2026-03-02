@@ -1,6 +1,5 @@
 (ns odoyle.rules
   (:require [clojure.spec.alpha :as s]
-            [expound.alpha :as expound]
             [clojure.string :as str])
   #?(:cljs
       (:require-macros [odoyle.rules :refer [ruleset]]))
@@ -44,10 +43,14 @@
                                     :odoyle.rules.dynamic-rule/when
                                     :odoyle.rules.dynamic-rule/then
                                     :odoyle.rules.dynamic-rule/then-finally]))
+
+(defn err-message [spec content]
+  (str "[odoyle][ERROR] " spec "\n" content))
+
 (defn parse [spec content]
   (let [res (s/conform spec content)]
     (if (= ::s/invalid res)
-      (throw (ex-info (expound/expound-str spec content) {}))
+      (throw (ex-info (err-message spec content) {}))
       res)))
 
 (def ^{:dynamic true
@@ -799,7 +802,7 @@ This is no longer necessary, because it is accessible via `match` directly."}
    (if-let [spec (s/get-spec attr)]
      (when (= ::s/invalid (s/conform spec value))
        (throw (ex-info (str "Error when checking attribute " attr "\n\n"
-                            (expound/expound-str spec value))
+                            (err-message spec value))
                        {})))
      (throw (ex-info (str "Couldn't find spec with name " attr \newline
                           "If you don't want o'doyle to require specs for attributes, call" \newline
