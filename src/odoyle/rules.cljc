@@ -745,23 +745,22 @@ This is no longer necessary, because it is accessible via `match` directly."}
         (update :then-finally-queue disj node-id))
     (throw (ex-info (str rule-name " does not exist in session") {}))))
 
-#?(:clj
- (defmacro ruleset
+(defmacro ruleset
   "Returns a vector of rules after transforming the given map."
   [rules]
   (reduce
-    (fn [v {:keys [rule-name fn-name conditions when-body then-body then-finally-body arg]}]
-      (conj v `(->Rule ~rule-name
-                       (mapv map->Condition ~conditions)
-                       nil
-                       ~(when (some? when-body) ;; need some? because it could be `false`
-                          `(fn ~fn-name [~'session ~arg] ~when-body))
-                       ~(when then-body
-                          `(fn ~fn-name [~'session ~arg] ~@then-body))
-                       ~(when then-finally-body
-                          `(fn ~fn-name [~'session] ~@then-finally-body)))))
-    []
-    (mapv ->rule (parse ::rules rules)))))
+   (fn [v {:keys [rule-name fn-name conditions when-body then-body then-finally-body arg]}]
+     (conj v `(->Rule ~rule-name
+                      (mapv map->Condition ~conditions)
+                      nil
+                      ~(when (some? when-body) ;; need some? because it could be `false`
+                         `(fn ~fn-name [~'session ~arg] ~when-body))
+                      ~(when then-body
+                         `(fn ~fn-name [~'session ~arg] ~@then-body))
+                      ~(when then-finally-body
+                         `(fn ~fn-name [~'session] ~@then-finally-body)))))
+   []
+   (mapv ->rule (parse ::rules rules))))
 
 (defn ->session
   "Returns a new session."
