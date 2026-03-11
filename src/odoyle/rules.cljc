@@ -1,57 +1,55 @@
 (ns odoyle.rules
-  (:require [clojure.spec.alpha :as s]
-            [clojure.string :as str])
-  #?(:cljs
-      (:require-macros [odoyle.rules :refer [ruleset]]))
+  (:require [clojure.string :as str])
   (:refer-clojure :exclude [reset! contains?]))
 
 ;; parsing
 
-(s/def ::id any?)
-(s/def ::attr qualified-keyword?)
-(s/def ::value any?)
-(s/def ::what-id (s/or :binding symbol? :value ::id))
-(s/def ::what-attr (s/or :binding symbol? :value ::attr))
-(s/def ::what-value (s/or :binding symbol? :value ::value))
-(s/def ::then (s/or :bool boolean? :func #(or (symbol? %) (fn? %))))
-(s/def ::what-opts (s/keys :opt-un [::then]))
-(s/def ::what-tuple (s/cat :id ::what-id, :attr ::what-attr, :value ::what-value, :opts (s/? ::what-opts)))
-(s/def ::what-block (s/cat :header #{:what} :body (s/+ (s/spec ::what-tuple))))
-(s/def ::when-block (s/cat :header #{:when} :body (s/+ #(not (keyword? %)))))
-(s/def ::then-block (s/cat :header #{:then} :body (s/+ #(not (keyword? %)))))
-(s/def ::then-finally-block (s/cat :header #{:then-finally} :body (s/+ #(not (keyword? %)))))
-
-(s/def ::rule (s/cat
-                :what-block ::what-block
-                :when-block (s/? ::when-block)
-                :then-block (s/? ::then-block)
-                :then-finally-block (s/? ::then-finally-block)))
-
-(s/def ::rules (s/map-of qualified-keyword? ::rule))
-
-(s/def :odoyle.rules.dynamic-rule/what (s/+ (s/spec ::what-tuple)))
-(s/def :odoyle.rules.dynamic-rule/when fn?)
-(s/def :odoyle.rules.dynamic-rule/then fn?)
-(s/def :odoyle.rules.dynamic-rule/then-finally fn?)
-(s/def ::dynamic-rule (s/keys :opt-un [:odoyle.rules.dynamic-rule/what
-                                       :odoyle.rules.dynamic-rule/when
-                                       :odoyle.rules.dynamic-rule/then
-                                       :odoyle.rules.dynamic-rule/then-finally]))
-
-(s/def :odoyle.rules.wrap-rule/what fn?)
-(s/def ::wrap-rule (s/keys :opt-un [:odoyle.rules.wrap-rule/what
-                                    :odoyle.rules.dynamic-rule/when
-                                    :odoyle.rules.dynamic-rule/then
-                                    :odoyle.rules.dynamic-rule/then-finally]))
+;; (s/def ::id any?)
+;; (s/def ::attr qualified-keyword?)
+;; (s/def ::value any?)
+;; (s/def ::what-id (s/or :binding symbol? :value ::id))
+;; (s/def ::what-attr (s/or :binding symbol? :value ::attr))
+;; (s/def ::what-value (s/or :binding symbol? :value ::value))
+;; (s/def ::then (s/or :bool boolean? :func #(or (symbol? %) (fn? %))))
+;; (s/def ::what-opts (s/keys :opt-un [::then]))
+;; (s/def ::what-tuple (s/cat :id ::what-id, :attr ::what-attr, :value ::what-value, :opts (s/? ::what-opts)))
+;; (s/def ::what-block (s/cat :header #{:what} :body (s/+ (s/spec ::what-tuple))))
+;; (s/def ::when-block (s/cat :header #{:when} :body (s/+ #(not (keyword? %)))))
+;; (s/def ::then-block (s/cat :header #{:then} :body (s/+ #(not (keyword? %)))))
+;; (s/def ::then-finally-block (s/cat :header #{:then-finally} :body (s/+ #(not (keyword? %)))))
+;; 
+;; (s/def ::rule (s/cat
+;;                 :what-block ::what-block
+;;                 :when-block (s/? ::when-block)
+;;                 :then-block (s/? ::then-block)
+;;                 :then-finally-block (s/? ::then-finally-block)))
+;; 
+;; (s/def ::rules (s/map-of qualified-keyword? ::rule))
+;; 
+;; (s/def :odoyle.rules.dynamic-rule/what (s/+ (s/spec ::what-tuple)))
+;; (s/def :odoyle.rules.dynamic-rule/when fn?)
+;; (s/def :odoyle.rules.dynamic-rule/then fn?)
+;; (s/def :odoyle.rules.dynamic-rule/then-finally fn?)
+;; (s/def ::dynamic-rule (s/keys :opt-un [:odoyle.rules.dynamic-rule/what
+;;                                        :odoyle.rules.dynamic-rule/when
+;;                                        :odoyle.rules.dynamic-rule/then
+;;                                        :odoyle.rules.dynamic-rule/then-finally]))
+;; 
+;; (s/def :odoyle.rules.wrap-rule/what fn?)
+;; (s/def ::wrap-rule (s/keys :opt-un [:odoyle.rules.wrap-rule/what
+;;                                     :odoyle.rules.dynamic-rule/when
+;;                                     :odoyle.rules.dynamic-rule/then
+;;                                     :odoyle.rules.dynamic-rule/then-finally]))
 
 (defn err-message [spec content]
   (str "[odoyle][ERROR] " spec "\n" content))
 
 (defn parse [spec content]
-  (let [res (s/conform spec content)]
-    (if (= ::s/invalid res)
-      (throw (ex-info (err-message spec content) {}))
-      res)))
+  ;; (let [res (s/conform spec content)]
+  ;;   (if (= ::s/invalid res)
+  ;;     (throw (ex-info (err-message spec content) {}))
+  ;;     res))
+  content)
 
 (def ^{:dynamic true
        :doc "Provides the current value of the session from inside a :then or :then-finally block.
@@ -570,11 +568,11 @@ This is no longer necessary, because it is accessible via `match` directly."}
 
 ;; public
 
-(s/def ::recursion-limit (s/nilable nat-int?))
-
-(s/fdef fire-rules
-  :args (s/cat :session ::session
-               :opts (s/? (s/keys :opt-un [::recursion-limit]))))
+;; (s/def ::recursion-limit (s/nilable nat-int?))
+;; 
+;; (s/fdef fire-rules
+;;   :args (s/cat :session ::session
+;;                :opts (s/? (s/keys :opt-un [::recursion-limit]))))
 
 (defn fire-rules
   "Fires :then and :then-finally blocks for any rules whose matches have been updated.
@@ -646,9 +644,9 @@ This is no longer necessary, because it is accessible via `match` directly."}
            (fire-rules session opts)))
        session))))
 
-(s/fdef add-rule
-  :args (s/cat :session ::session
-               :rule #(instance? Rule %)))
+;; (s/fdef add-rule
+;;   :args (s/cat :session ::session
+;;                :rule #(instance? Rule %)))
 
 (defn add-rule
   "Adds a rule to the given session."
@@ -710,9 +708,9 @@ This is no longer necessary, because it is accessible via `match` directly."}
         ;; assoc'ed by add-condition
         (dissoc :mem-node-ids :join-node-ids :bindings))))
 
-(s/fdef remove-rule
-  :args (s/cat :session ::session
-               :rule-name qualified-keyword?))
+;; (s/fdef remove-rule
+;;   :args (s/cat :session ::session
+;;                :rule-name qualified-keyword?))
 
 (defn remove-rule
   "Removes a rule from the given session."
@@ -780,45 +778,45 @@ This is no longer necessary, because it is accessible via `match` directly."}
      :then-queue #{}
      :then-finally-queue #{}}))
 
-(s/def ::session #(instance? Session %))
+;; (s/def ::session #(instance? Session %))
+;; 
+;; (s/def ::insert-args
+;;   (s/or
+;;     :single-combo (s/cat :session ::session
+;;                          :fact (s/tuple ::id ::attr ::value))
+;;     :batch (s/cat :session ::session
+;;                   :id ::id
+;;                   :attr->value (s/map-of ::attr ::value))
+;;     :single (s/cat :session ::session
+;;                    :id ::id
+;;                    :attr ::attr
+;;                    :value ::value)))
 
-(s/def ::insert-args
-  (s/or
-    :single-combo (s/cat :session ::session
-                         :fact (s/tuple ::id ::attr ::value))
-    :batch (s/cat :session ::session
-                  :id ::id
-                  :attr->value (s/map-of ::attr ::value))
-    :single (s/cat :session ::session
-                   :id ::id
-                   :attr ::attr
-                   :value ::value)))
-
-(defn- check-insert-spec
-  ([[attr value]]
-   (check-insert-spec attr value))
-  ([attr value]
-   (if-let [spec (s/get-spec attr)]
-     (when (= ::s/invalid (s/conform spec value))
-       (throw (ex-info (str "Error when checking attribute " attr "\n\n"
-                            (err-message spec value))
-                       {})))
-     (throw (ex-info (str "Couldn't find spec with name " attr \newline
-                          "If you don't want o'doyle to require specs for attributes, call" \newline
-                          "(clojure.spec.test.alpha/unstrument 'odoyle.rules/insert)" \newline)
-                     {})))))
-
-(def ^:private insert-conformer
-  (s/conformer
-    (fn [[kind args :as parsed-args]]
-      (case kind
-        :single-combo (check-insert-spec (nth (:fact args) 1) (nth (:fact args) 2))
-        :batch (run! check-insert-spec (:attr->value args))
-        :single (check-insert-spec (:attr args) (:value args)))
-      parsed-args)))
-
-(s/fdef insert
-  :args (s/and ::insert-args insert-conformer))
+;; (defn- check-insert-spec
+;;   ([[attr value]]
+;;    (check-insert-spec attr value))
+;;   ([attr value]
+;;    (if-let [spec (s/get-spec attr)]
+;;      (when (= ::s/invalid (s/conform spec value))
+;;        (throw (ex-info (str "Error when checking attribute " attr "\n\n"
+;;                             (err-message spec value))
+;;                        {})))
+;;      (throw (ex-info (str "Couldn't find spec with name " attr \newline
+;;                           "If you don't want o'doyle to require specs for attributes, call" \newline
+;;                           "(clojure.spec.test.alpha/unstrument 'odoyle.rules/insert)" \newline)
+;;                      {})))))
+;; 
+;; (def ^:private insert-conformer
+;;   (s/conformer
+;;     (fn [[kind args :as parsed-args]]
+;;       (case kind
+;;         :single-combo (check-insert-spec (nth (:fact args) 1) (nth (:fact args) 2))
+;;         :batch (run! check-insert-spec (:attr->value args))
+;;         :single (check-insert-spec (:attr args) (:value args)))
+;;       parsed-args)))
+;; 
+;; (s/fdef insert
+;;   :args (s/and ::insert-args insert-conformer))
 
 (defn insert
   "Inserts a fact into the session. Can optionally insert multiple facts with the same id.
@@ -834,16 +832,16 @@ This is no longer necessary, because it is accessible via `match` directly."}
    (->> (get-alpha-nodes-for-fact session (:alpha-node session) id attr value true)
         (upsert-fact session id attr value))))
 
-(s/def ::insert!-args
-  (s/or
-    :batch (s/cat :id ::id
-                  :attr->value (s/map-of ::attr ::value))
-    :single (s/cat :id ::id
-                   :attr ::attr
-                   :value ::value)))
-
-(s/fdef insert!
-  :args ::insert!-args)
+;; (s/def ::insert!-args
+;;   (s/or
+;;     :batch (s/cat :id ::id
+;;                   :attr->value (s/map-of ::attr ::value))
+;;     :single (s/cat :id ::id
+;;                    :attr ::attr
+;;                    :value ::value)))
+;; 
+;; (s/fdef insert!
+;;   :args ::insert!-args)
 
 (defn insert!
   "Equivalent to:
@@ -858,8 +856,8 @@ This is no longer necessary, because it is accessible via `match` directly."}
      (vswap! *mutable-session* insert id attr value)
      (throw (ex-info "This function must be called in a :then or :then-finally block" {})))))
 
-(s/fdef retract
-  :args (s/cat :session ::session, :id ::id, :attr ::attr))
+;; (s/fdef retract
+;;   :args (s/cat :session ::session, :id ::id, :attr ::attr))
 
 (defn retract
   "Retracts the fact with the given id + attr combo."
@@ -876,8 +874,8 @@ This is no longer necessary, because it is accessible via `match` directly."}
       session
       node-paths)))
 
-(s/fdef retract!
-  :args (s/cat :id ::id, :attr ::attr))
+;; (s/fdef retract!
+;;   :args (s/cat :id ::id, :attr ::attr))
 
 (defn retract!
   "Equivalent to:
@@ -888,8 +886,8 @@ This is no longer necessary, because it is accessible via `match` directly."}
     (vswap! *mutable-session* retract id attr)
     (throw (ex-info "This function must be called in a :then or :then-finally block" {}))))
 
-(s/fdef query-all
-  :args (s/cat :session ::session, :rule-name (s/? qualified-keyword?)))
+;; (s/fdef query-all
+;;   :args (s/cat :session ::session, :rule-name (s/? qualified-keyword?)))
 
 (defn query-all
   "When called with just a session, returns a vector of all inserted facts.
@@ -912,8 +910,8 @@ This is no longer necessary, because it is accessible via `match` directly."}
        []
        (:matches rule)))))
 
-(s/fdef reset!
-  :args (s/cat :new-session ::session))
+;; (s/fdef reset!
+;;   :args (s/cat :new-session ::session))
 
 (defn reset!
   "Mutates the session from a :then or :then-finally block."
@@ -924,17 +922,17 @@ This is no longer necessary, because it is accessible via `match` directly."}
       (throw (ex-info "You may only call `reset!` once in a :then or :then-finally block" {})))
     (throw (ex-info "You may only call `reset!` in a :then or :then-finally block" {}))))
 
-(s/fdef contains?
-  :args (s/cat :session ::session, :id ::id, :attr ::attr))
+;; (s/fdef contains?
+;;   :args (s/cat :session ::session, :id ::id, :attr ::attr))
 
 (defn contains?
   "Returns true if the session contains a fact with the given id and attribute."
   [session id attr]
   (clojure.core/contains? (:id-attr-nodes session) [id attr]))
 
-(s/fdef wrap-rule
-  :args (s/cat :rule #(instance? Rule %)
-               :rule-fns ::wrap-rule))
+;; (s/fdef wrap-rule
+;;   :args (s/cat :rule #(instance? Rule %)
+;;                :rule-fns ::wrap-rule))
 
 (defn wrap-rule
   "Wraps the functions of a rule so they can be conveniently intercepted
