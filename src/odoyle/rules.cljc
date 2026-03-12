@@ -93,77 +93,82 @@ This is no longer necessary, because it is accessible via `match` directly."}
   *match* nil)
 
 ;; private
+(defmacro pseudo-record [record-name attr-vec]
+  `(defn ~record-name ~attr-vec
+     ~(zipmap (map (comp keyword name) attr-vec) attr-vec)))
 
-(defrecord Fact [id attr value])
-(defrecord Token [fact ;; Fact
-                  kind ;; :insert, :retract, :update
-                  old-fact ;; only used when updating
-                  ])
-(defrecord Binding [field ;; :id, :attr, or :value
-                    sym ;; symbol
-                    key ;; keyword
-                    ])
-(defrecord Match [vars ;; map of binding keywords -> values from facts
-                  enabled ;; boolean indicating if this match should be returned in queries
-                  ])
-(defrecord AlphaNode [path ;; the get-in vector to reach this node from the root
-                      test-field ;; :id, :attr, or :value
-                      test-value ;; anything
-                      children ;; vector of AlphaNode
-                      successors ;; vector of JoinNode ids
-                      facts ;; map of id -> (map of attr -> Fact)
-                      ])
-(defrecord MemoryNode [id
-                       parent-id ;; JoinNode id
-                       child-id ;; JoinNode id
-                       leaf-node-id ;; id of the MemoryNode at the end (same as id if this is the leaf node)
-                       condition ;; Condition associated with this node
-                       matches ;; map of id+attrs -> Match
-                       what-fn ;; fn
-                       when-fn ;; fn
-                       then-fn ;; fn
-                       then-finally-fn ;; fn
-                       trigger ;; boolean indicating that the :then block can be triggered
-                       ])
-(defrecord JoinNode [id
-                     parent-id ;; MemoryNode id
-                     child-id ;; MemoryNode id
-                     alpha-node-path ;; the get-in vector to reach the parent AlphaNode from the root
-                     condition ;; Condition associated with this node
-                     id-key ;; the name of the id binding if we know it
-                     old-id-attrs ;; a set of id+attr so the node can keep track of which facts are "new"
-                     disable-fast-updates ;; boolean indicating it isn't safe to do fast updates
-                     ])
-(defrecord Condition [nodes ;; vector of AlphaNode
-                      bindings ;; vector of Binding
-                      opts ;; map of options
-                      ])
-(defrecord Rule [name ;; keyword
-                 conditions ;; vector of Condition
-                 what-fn ;; fn
-                 when-fn ;; fn
-                 then-fn ;; fn
-                 then-finally-fn ;; fn
-                 ])
-(defrecord Session [alpha-node ;; AlphaNode
-                    beta-nodes ;; map of int -> MemoryNode or JoinNode
-                    last-id ;; last id assigned to a beta node
-                    rule-name->node-id ;; map of rule name -> the id of the associated MemoryNode
-                    node-id->rule-name ;; map of the id of a MemoryNode -> the associated rule name
-                    id-attr-nodes ;; map of id+attr -> set of alpha node paths
-                    then-queue ;; set of (MemoryNode id, id+attrs) that need executed
-                    then-finally-queue ;; set of MemoryNode ids that need executed
-                    ])
+(pseudo-record record->Fact [id attr value])
+(pseudo-record record->Token [fact ;; Fact
+                              kind ;; :insert, :retract, :update
+                              old-fact ;; only used when updating
+                              ])
+(pseudo-record record->Binding [field ;; :id, :attr, or :value
+                                sym ;; symbol
+                                key ;; keyword
+                                ])
+(pseudo-record record->Match [vars ;; map of binding keywords -> values from facts
+                              enabled ;; boolean indicating if this match should be returned in queries
+                              ])
+(pseudo-record record->AlphaNode [path ;; the get-in vector to reach this node from the root
+                                  test-field ;; :id, :attr, or :value
+                                  test-value ;; anything
+                                  children ;; vector of AlphaNode
+                                  successors ;; vector of JoinNode ids
+                                  facts ;; map of id -> (map of attr -> Fact)
+                                  ])
+(pseudo-record record->MemoryNode [id
+                                   parent-id ;; JoinNode id
+                                   child-id ;; JoinNode id
+                                   leaf-node-id ;; id of the MemoryNode at the end (same as id if this is the leaf node)
+                                   condition ;; Condition associated with this node
+                                   matches ;; map of id+attrs -> Match
+                                   what-fn ;; fn
+                                   when-fn ;; fn
+                                   then-fn ;; fn
+                                   then-finally-fn ;; fn
+                                   trigger ;; boolean indicating that the :then block can be triggered
+                                   ])
+(pseudo-record record->JoinNode [id
+                                 parent-id ;; MemoryNode id
+                                 child-id ;; MemoryNode id
+                                 alpha-node-path ;; the get-in vector to reach the parent AlphaNode from the root
+                                 condition ;; Condition associated with this node
+                                 id-key ;; the name of the id binding if we know it
+                                 old-id-attrs ;; a set of id+attr so the node can keep track of which facts are "new"
+                                 disable-fast-updates ;; boolean indicating it isn't safe to do fast updates
+                                 ])
+(pseudo-record record->Condition [nodes ;; vector of AlphaNode
+                                  bindings ;; vector of Binding
+                                  opts ;; map of options
+                                  ])
+(pseudo-record record->Rule [name ;; keyword
+                             conditions ;; vector of Condition
+                             what-fn ;; fn
+                             when-fn ;; fn
+                             then-fn ;; fn
+                             then-finally-fn ;; fn
+                             ])
+(pseudo-record record->Session [alpha-node ;; AlphaNode
+                                beta-nodes ;; map of int -> MemoryNode or JoinNode
+                                last-id ;; last id assigned to a beta node
+                                rule-name->node-id ;; map of rule name -> the id of the associated MemoryNode
+                                node-id->rule-name ;; map of the id of a MemoryNode -> the associated rule name
+                                id-attr-nodes ;; map of id+attr -> set of alpha node paths
+                                then-queue ;; set of (MemoryNode id, id+attrs) that need executed
+                                then-finally-queue ;; set of MemoryNode ids that need executed
+                                ])
 
 (defn- add-to-condition [condition field [kind value]]
   (case kind
-    :binding (update condition :bindings conj (->Binding field (list 'quote value) (keyword value)))
-    :value (update condition :nodes conj (map->AlphaNode {:path nil
-                                                          :test-field field
-                                                          :test-value value
-                                                          :children []
-                                                          :successors []
-                                                          :facts {}}))))
+    :binding (update condition :bindings conj (record->Binding field (list 'quote value) (keyword value)))
+    :value (update condition :nodes conj (identity
+                                          #_map->AlphaNode
+                                          {:path nil
+                                           :test-field field
+                                           :test-value value
+                                           :children []
+                                           :successors []
+                                           :facts {}}))))
 
 (defn- ->condition [{:keys [id attr value opts]}]
   (-> {:bindings [] :nodes [] :opts opts}
@@ -234,21 +239,26 @@ This is no longer necessary, because it is accessible via `match` directly."}
         join-node-id (vswap! *last-id inc)
         mem-node-id (vswap! *last-id inc)
         parent-mem-node-id (-> session :mem-node-ids last)
-        mem-node (map->MemoryNode {:id mem-node-id
-                                   :parent-id join-node-id
-                                   :child-id nil
-                                   :leaf-node-id nil
-                                   :condition condition
-                                   :matches {}
-                                   :trigger false})
-        join-node (map->JoinNode {:id join-node-id
-                                  :parent-id parent-mem-node-id
-                                  :child-id mem-node-id
-                                  :alpha-node-path alpha-node-path
-                                  :condition condition
-                                  :id-key nil
-                                  :old-id-attrs #{}
-                                  :disable-fast-updates false})
+        mem-node (identity
+                  #_map->MemoryNode
+                  {:id mem-node-id
+                   :parent-id join-node-id
+                   :child-id nil
+                   :leaf-node-id nil
+                   :condition condition
+                   :matches {}
+                   :trigger false})
+        join-node (identity
+                   #_map->JoinNode
+                   {:join-node? true
+                    :id join-node-id
+                    :parent-id parent-mem-node-id
+                    :child-id mem-node-id
+                    :alpha-node-path alpha-node-path
+                    :condition condition
+                    :id-key nil
+                    :old-id-attrs #{}
+                    :disable-fast-updates false})
         session (-> session
                     (assoc-in [:beta-nodes join-node-id] join-node)
                     (assoc-in [:beta-nodes mem-node-id] mem-node))
@@ -332,7 +342,7 @@ This is no longer necessary, because it is accessible via `match` directly."}
    (if-let [new-vars (get-vars-from-fact vars (:condition join-node) alpha-fact)]
      (let [id+attr (get-id-attr alpha-fact)
            id+attrs (conj id+attrs id+attr)
-           new-token (->Token alpha-fact (:kind token) nil)
+           new-token (record->Token alpha-fact (:kind token) nil)
            new? (not (clojure.core/contains? (:old-id-attrs join-node) id+attr))]
        (left-activate-memory-node session (:child-id join-node) id+attrs new-vars new-token new?))
      session)))
@@ -395,7 +405,7 @@ This is no longer necessary, because it is accessible via `match` directly."}
                   (:insert :update)
                   (as-> session $
                     (update-in $ node-path assoc-in [:matches id+attrs]
-                               (->Match vars enabled?))
+                               (record->Match vars enabled?))
                     (if (and leaf-node? (:trigger node))
                       (cond-> $
                         (:then-fn node)
@@ -469,8 +479,8 @@ This is no longer necessary, because it is accessible via `match` directly."}
          (if (and (= :update kind)
                   (get-in session [:beta-nodes child-id :disable-fast-updates]))
            (-> session
-               (right-activate-join-node child-id id+attr (->Token old-fact :retract nil))
-               (right-activate-join-node child-id id+attr (->Token fact :insert old-fact)))
+               (right-activate-join-node child-id id+attr (record->Token old-fact :retract nil))
+               (right-activate-join-node child-id id+attr (record->Token fact :insert old-fact)))
            (right-activate-join-node session child-id id+attr token)))
        $
        (:successors (get-in session node-path))))))
@@ -502,7 +512,7 @@ This is no longer necessary, because it is accessible via `match` directly."}
 
 (defn- upsert-fact [session id attr value node-paths]
   (let [id+attr [id attr]
-        fact (->Fact id attr value)]
+        fact (record->Fact id attr value)]
     (if-let [existing-node-paths (get-in session [:id-attr-nodes id+attr])]
       (as-> session $
         ;; retract any facts from nodes that the new fact wasn't inserted in
@@ -512,7 +522,7 @@ This is no longer necessary, because it is accessible via `match` directly."}
              (let [node (get-in session node-path)
                    old-fact (get-in node [:facts id attr])]
                (assert old-fact)
-               (right-activate-alpha-node session node-path (->Token old-fact :retract nil)))
+               (right-activate-alpha-node session node-path (record->Token old-fact :retract nil)))
              session))
          $
          existing-node-paths)
@@ -523,13 +533,13 @@ This is no longer necessary, because it is accessible via `match` directly."}
              (let [node (get-in session node-path)
                    old-fact (get-in node [:facts id attr])]
                (assert old-fact)
-               (right-activate-alpha-node session node-path (->Token fact :update old-fact)))
-             (right-activate-alpha-node session node-path (->Token fact :insert nil))))
+               (right-activate-alpha-node session node-path (record->Token fact :update old-fact)))
+             (right-activate-alpha-node session node-path (record->Token fact :insert nil))))
          $
          node-paths))
       (reduce
        (fn [session node-path]
-         (right-activate-alpha-node session node-path (->Token fact :insert nil)))
+         (right-activate-alpha-node session node-path (record->Token fact :insert nil)))
        session
        node-paths))))
 
@@ -738,7 +748,7 @@ This is no longer necessary, because it is accessible via `match` directly."}
           (if node-id
             (let [node (get-in session [:beta-nodes node-id])
                   session (update session :beta-nodes dissoc node-id)]
-              (if (instance? JoinNode node)
+              (if (:join-node? node)
                 (-> session
                     (update-in (:alpha-node-path node)
                                (fn [alpha-node]
@@ -765,8 +775,8 @@ This is no longer necessary, because it is accessible via `match` directly."}
   [rules]
   (reduce
    (fn [v {:keys [rule-name fn-name conditions when-body then-body then-finally-body arg]}]
-     (conj v `(->Rule ~rule-name
-                      (mapv map->Condition ~conditions)
+     (conj v `(record->Rule ~rule-name
+                      (vec #_map->Condition ~conditions)
                       nil
                       ~(when (some? when-body) ;; need some? because it could be `false`
                          `(fn ~fn-name [~'session ~arg] ~when-body))
@@ -780,13 +790,16 @@ This is no longer necessary, because it is accessible via `match` directly."}
 (defn ->session
   "Returns a new session."
   []
-  (map->Session
-   {:alpha-node (map->AlphaNode {:path [:alpha-node]
-                                 :test-field nil
-                                 :test-value nil
-                                 :children []
-                                 :successors []
-                                 :facts {}})
+  (identity
+   #_map->Session
+   {:alpha-node (identity
+                 #_map->AlphaNode
+                 {:path [:alpha-node]
+                  :test-field nil
+                  :test-value nil
+                  :children []
+                  :successors []
+                  :facts {}})
     :beta-nodes {}
     :last-id -1
     :rule-name->node-id {}
@@ -887,7 +900,7 @@ This is no longer necessary, because it is accessible via `match` directly."}
      (fn [session node-path]
        (let [node (get-in session node-path)
              fact (get-in node [:facts id attr])]
-         (right-activate-alpha-node session node-path (->Token fact :retract nil))))
+         (right-activate-alpha-node session node-path (record->Token fact :retract nil))))
      session
      node-paths)))
 
@@ -972,4 +985,3 @@ This is no longer necessary, because it is accessible via `match` directly."}
             (fn wrap-then-finally [f]
               (fn [session]
                 (then-finally-fn f session))))))
-
