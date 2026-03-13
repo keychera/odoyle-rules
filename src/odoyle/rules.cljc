@@ -55,7 +55,6 @@
   (case header-key
     :what (into []
                 (map (fn [[id attr value opts]]
-                       (println id attr value opts)
                        (cond->
                         {:id (resolve-token id)
                          :attr (resolve-token attr)
@@ -116,18 +115,7 @@ This is no longer necessary, because it is accessible via `match` directly."}
                                   successors ;; vector of JoinNode ids
                                   facts ;; map of id -> (map of attr -> Fact)
                                   ])
-(pseudo-record record->MemoryNode [id
-                                   parent-id ;; JoinNode id
-                                   child-id ;; JoinNode id
-                                   leaf-node-id ;; id of the MemoryNode at the end (same as id if this is the leaf node)
-                                   condition ;; Condition associated with this node
-                                   matches ;; map of id+attrs -> Match
-                                   what-fn ;; fn
-                                   when-fn ;; fn
-                                   then-fn ;; fn
-                                   then-finally-fn ;; fn
-                                   trigger ;; boolean indicating that the :then block can be triggered
-                                   ])
+
 (pseudo-record record->JoinNode [id
                                  parent-id ;; MemoryNode id
                                  child-id ;; MemoryNode id
@@ -176,6 +164,11 @@ This is no longer necessary, because it is accessible via `match` directly."}
       (add-to-condition :attr attr)
       (add-to-condition :value value)))
 
+(defn pseudo-munge [text]
+  (->> (partition-by #{\.} text)
+       (map (fn [l] (if (= \. (first l)) \- (str/join l))))
+       (str/join)))
+
 (defn ->rule
   "dynamic rules are not supported for now"
   ([_rule-name _rule]
@@ -186,17 +179,15 @@ This is no longer necessary, because it is accessible via `match` directly."}
          when-body (:body when-block)
          then-body (:body then-block)
          then-finally-body (:body then-finally-block)
-         syms (->> conditions
-                   (mapcat :bindings)
-                   (map :sym)
-                   (map last) ;; must do this because we quoted it above
-                   (filter simple-symbol?) ;; exclude qualified bindings from destructuring
-                   set
-                   vec)]
+         syms (into []
+                    (comp (mapcat :bindings)
+                          (map :sym)
+                          (map last)
+                          (filter simple-symbol?)
+                          (distinct))
+                    conditions)]
      {:rule-name rule-name
-      :fn-name (-> (str (namespace rule-name) "-" (name rule-name))
-                   (str/replace "." "-")
-                   symbol)
+      :fn-name (symbol (str (pseudo-munge (namespace rule-name)) \- (name rule-name)))
       :conditions conditions
       :arg {:keys syms :as 'match}
       :when-body (cond
@@ -223,6 +214,39 @@ This is no longer necessary, because it is accessible via `match` directly."}
           (update node :children conj (add-alpha-node new-node other-nodes *alpha-node-path))))
       node)))
 
+(defn hoare-partition
+  [coll lo hi comp-fn]
+  (let [pivot (nth coll lo)]
+    (loop [coll' coll i (dec lo) j (inc hi)]
+      (let [i'' (loop [i' (inc i)]
+                  (if (< (comp-fn (nth coll' i') pivot) 0)
+                    (recur (inc i'))
+                    i'))
+            j'' (loop [j' (dec j)]
+                  (if (> (comp-fn (nth coll' j') pivot) 0)
+                    (recur (dec j'))
+                    j'))]
+        (if (>= i'' j'')
+          [coll' j'']
+          (let [ival (nth coll' i'')
+                jval (nth coll' j'')]
+            (recur (-> coll'
+                       (assoc i'' jval)
+                       (assoc j'' ival))
+                   i'' j'')))))))
+
+(defn quicksort [coll lo hi comp-fn]
+  (if (and (>= lo 0) (>= hi 0) (< lo hi))
+    (let [[coll' p] (hoare-partition coll lo hi comp-fn)]
+      (-> coll'
+          (quicksort lo p comp-fn)
+          (quicksort (inc p) hi comp-fn)))
+    coll))
+
+(defn temp-sort
+  ([comp-fn coll]
+   (quicksort coll 0 (dec (count coll)) comp-fn)))
+
 (defn- is-ancestor [session node-id1 node-id2]
   (loop [node-id node-id2]
     (if-let [parent-id (:parent-id (get-in session [:beta-nodes node-id]))]
@@ -230,6 +254,14 @@ This is no longer necessary, because it is accessible via `match` directly."}
         1
         (recur parent-id))
       -1)))
+
+(defn total-order-ancestor [session id1 id2]
+  (if (= id1 id2)
+    0
+    (cond
+      (= (is-ancestor session id1 id2) 1) -1
+      (= (is-ancestor session id2 id1) 1)  1
+      :else (compare id1 id2))))
 
 (defn- add-condition [session condition]
   (let [*alpha-node-path (volatile! [:alpha-node])
@@ -265,7 +297,7 @@ This is no longer necessary, because it is accessible via `match` directly."}
         successor-ids (conj (:successors (get-in session alpha-node-path))
                             join-node-id)
         ;; successors must be sorted by ancestry (descendents first) to avoid duplicate rule firings
-        successor-ids (vec (sort (partial is-ancestor session) successor-ids))]
+        successor-ids (apply vector (temp-sort (fn [a b] (total-order-ancestor session a b)) successor-ids))]
     (-> session
         (update-in alpha-node-path assoc :successors successor-ids)
         (cond-> parent-mem-node-id
@@ -403,25 +435,25 @@ This is no longer necessary, because it is accessible via `match` directly."}
         ;; update session
         session (case kind
                   (:insert :update)
-                  (as-> session $
-                    (update-in $ node-path assoc-in [:matches id+attrs]
+                  (as-> session session'
+                    (update-in session' node-path assoc-in [:matches id+attrs]
                                (record->Match vars enabled?))
                     (if (and leaf-node? (:trigger node))
-                      (cond-> $
+                      (cond-> session'
                         (:then-fn node)
                         (update :then-queue conj [node-id id+attrs])
                         (:then-finally-fn node)
                         (update :then-finally-queue conj node-id))
-                      $)
-                    (update-in $ [:beta-nodes (:parent-id node) :old-id-attrs]
+                      session')
+                    (update-in session' [:beta-nodes (:parent-id node) :old-id-attrs]
                                conj id+attr))
                   :retract
-                  (as-> session $
-                    (update-in $ node-path update :matches dissoc id+attrs)
+                  (as-> session session'
+                    (update-in session' node-path update :matches dissoc id+attrs)
                     (if (and leaf-node? (:then-finally-fn node))
-                      (update $ :then-finally-queue conj node-id)
-                      $)
-                    (update-in $ [:beta-nodes (:parent-id node) :old-id-attrs]
+                      (update session' :then-finally-queue conj node-id)
+                      session')
+                    (update-in session' [:beta-nodes (:parent-id node) :old-id-attrs]
                                disj id+attr)))]
     (if-let [join-node-id (:child-id node)]
       (left-activate-join-node session join-node-id id+attrs vars token)
@@ -447,10 +479,10 @@ This is no longer necessary, because it is accessible via `match` directly."}
 
 (defn- right-activate-alpha-node [session node-path {:keys [fact kind old-fact] :as token}]
   (let [[id attr :as id+attr] (get-id-attr fact)]
-    (as-> session $
+    (as-> session session'
       (case kind
         :insert
-        (-> $
+        (-> session'
             (update-in node-path assoc-in [:facts id attr] fact)
             (update-in [:id-attr-nodes id+attr]
                        (fn [node-paths]
@@ -458,7 +490,7 @@ This is no longer necessary, because it is accessible via `match` directly."}
                            (assert (not (clojure.core/contains? node-paths node-path)))
                            (conj node-paths node-path)))))
         :retract
-        (-> $
+        (-> session'
             (update-in node-path update-in [:facts id] dissoc attr)
             (update :id-attr-nodes
                     (fn [nodes]
@@ -469,7 +501,7 @@ This is no longer necessary, because it is accessible via `match` directly."}
                           (assoc nodes id+attr node-paths)
                           (dissoc nodes id+attr))))))
         :update
-        (-> $
+        (-> session'
             (update-in node-path update-in [:facts id attr]
                        (fn [existing-old-fact]
                          (assert (= old-fact existing-old-fact))
@@ -482,7 +514,7 @@ This is no longer necessary, because it is accessible via `match` directly."}
                (right-activate-join-node child-id id+attr (record->Token old-fact :retract nil))
                (right-activate-join-node child-id id+attr (record->Token fact :insert old-fact)))
            (right-activate-join-node session child-id id+attr token)))
-       $
+       session'
        (:successors (get-in session node-path))))))
 
 (defn- get-alpha-nodes-for-fact [session alpha-node id attr value root?]
@@ -514,7 +546,7 @@ This is no longer necessary, because it is accessible via `match` directly."}
   (let [id+attr [id attr]
         fact (record->Fact id attr value)]
     (if-let [existing-node-paths (get-in session [:id-attr-nodes id+attr])]
-      (as-> session $
+      (as-> session session'
         ;; retract any facts from nodes that the new fact wasn't inserted in
         (reduce
          (fn [session node-path]
@@ -524,7 +556,7 @@ This is no longer necessary, because it is accessible via `match` directly."}
                (assert old-fact)
                (right-activate-alpha-node session node-path (record->Token old-fact :retract nil)))
              session))
-         $
+         session'
          existing-node-paths)
         ;; update or insert facts, depending on whether the node already exists
         (reduce
@@ -535,7 +567,7 @@ This is no longer necessary, because it is accessible via `match` directly."}
                (assert old-fact)
                (right-activate-alpha-node session node-path (record->Token fact :update old-fact)))
              (right-activate-alpha-node session node-path (record->Token fact :insert nil))))
-         $
+         session'
          node-paths))
       (reduce
        (fn [session node-path]
@@ -776,14 +808,14 @@ This is no longer necessary, because it is accessible via `match` directly."}
   (reduce
    (fn [v {:keys [rule-name fn-name conditions when-body then-body then-finally-body arg]}]
      (conj v `(record->Rule ~rule-name
-                      (vec #_map->Condition ~conditions)
-                      nil
-                      ~(when (some? when-body) ;; need some? because it could be `false`
-                         `(fn ~fn-name [~'session ~arg] ~when-body))
-                      ~(when then-body
-                         `(fn ~fn-name [~'session ~arg] ~@then-body))
-                      ~(when then-finally-body
-                         `(fn ~fn-name [~'session] ~@then-finally-body)))))
+                            ~conditions
+                            nil
+                            ~(when (some? when-body) ;; need some? because it could be `false`
+                               `(fn ~fn-name [~'session ~arg] ~when-body))
+                            ~(when then-body
+                               `(fn ~fn-name [~'session ~arg] ~@then-body))
+                            ~(when then-finally-body
+                               `(fn ~fn-name [~'session] ~@then-finally-body)))))
    []
    (mapv ->rule (parse-rules rules))))
 
