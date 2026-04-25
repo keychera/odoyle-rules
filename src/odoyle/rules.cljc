@@ -286,7 +286,8 @@ This is no longer necessary, because it is accessible via `match` directly."}
     vars
     (:bindings condition)))
 
-(def ^:private get-id-attr (juxt :id :attr))
+(defrecord IdAttr [id attr])
+(defn fact->id+attr [{:keys [id attr]}] (->IdAttr id attr))
 
 (declare left-activate-memory-node)
 
@@ -312,7 +313,7 @@ This is no longer necessary, because it is accessible via `match` directly."}
          (vals (:facts alpha-node))))))
   ([session join-node id+attrs vars token alpha-fact]
    (if-let [new-vars (get-vars-from-fact vars (:condition join-node) alpha-fact)]
-     (let [id+attr (get-id-attr alpha-fact)
+     (let [id+attr (fact->id+attr alpha-fact)
            id+attrs (conj id+attrs id+attr)
            new-token (->Token alpha-fact (:kind token) nil)
            new? (not (clojure.core/contains? (:old-id-attrs join-node) id+attr))]
@@ -418,7 +419,8 @@ This is no longer necessary, because it is accessible via `match` directly."}
         session))))
 
 (defn- right-activate-alpha-node [session node-path {:keys [fact kind old-fact] :as token}]
-  (let [[id attr :as id+attr] (get-id-attr fact)]
+  (let [{:keys [id attr]} fact
+        id+attr (->IdAttr id attr)]
     (as-> session $
           (case kind
             :insert
@@ -483,7 +485,7 @@ This is no longer necessary, because it is accessible via `match` directly."}
           (:children alpha-node))))))
 
 (defn- upsert-fact [session id attr value node-paths]
-  (let [id+attr [id attr]
+  (let [id+attr (->IdAttr id attr)
         fact (->Fact id attr value)]
     (if-let [existing-node-paths (get-in session [:id-attr-nodes id+attr])]
       (as-> session $
@@ -862,7 +864,7 @@ This is no longer necessary, because it is accessible via `match` directly."}
 (defn retract
   "Retracts the fact with the given id + attr combo."
   [session id attr]
-  (let [id+attr [id attr]
+  (let [id+attr (->IdAttr id attr)
         node-paths (get-in session [:id-attr-nodes id+attr])]
     (when-not node-paths
       (throw (ex-info (str id+attr " not in session") {})))
@@ -893,7 +895,7 @@ This is no longer necessary, because it is accessible via `match` directly."}
   "When called with just a session, returns a vector of all inserted facts.
   Otherwise, returns a vector of maps containing all the matches for the given rule."
   ([session]
-   (mapv (fn [[[id attr] nodes]]
+   (mapv (fn [[{:keys [id attr]} nodes]]
            (-> (get-in session (first nodes))
                (get-in [:facts id attr])
                ((juxt :id :attr :value))))
@@ -928,7 +930,7 @@ This is no longer necessary, because it is accessible via `match` directly."}
 (defn contains?
   "Returns true if the session contains a fact with the given id and attribute."
   [session id attr]
-  (clojure.core/contains? (:id-attr-nodes session) [id attr]))
+  (clojure.core/contains? (:id-attr-nodes session) (->IdAttr id attr)))
 
 (s/fdef wrap-rule
   :args (s/cat :rule #(instance? Rule %)
