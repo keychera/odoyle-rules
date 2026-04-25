@@ -73,7 +73,7 @@ This is no longer necessary, because it is accessible via `match` directly."}
                     ])
 (defrecord Match [vars ;; map of binding keywords -> values from facts
                   enabled ;; boolean indicating if this match should be returned in queries
-                  ])
+                  id+attrs])
 (defrecord AlphaNode [path ;; the get-in vector to reach this node from the root
                       test-field ;; :id, :attr, or :value
                       test-value ;; anything
@@ -86,7 +86,7 @@ This is no longer necessary, because it is accessible via `match` directly."}
                        child-id ;; JoinNode id
                        leaf-node-id ;; id of the MemoryNode at the end (same as id if this is the leaf node)
                        condition ;; Condition associated with this node
-                       matches ;; map of id+attrs -> Match
+                       matches ;; map of hash(id+attrs) -> Match
                        what-fn ;; fn
                        when-fn ;; fn
                        then-fn ;; fn
@@ -289,6 +289,9 @@ This is no longer necessary, because it is accessible via `match` directly."}
 (defrecord IdAttr [id attr])
 (defn fact->id+attr [{:keys [id attr]}] (->IdAttr id attr))
 
+(defn id+attrs->key [id+attrs]
+  (hash id+attrs))
+
 (declare left-activate-memory-node)
 
 (defn- left-activate-join-node
@@ -373,16 +376,17 @@ This is no longer necessary, because it is accessible via `match` directly."}
                          ((:when-fn node) session vars))))
         ;; the id+attr of this token is the last one in the vector
         id+attr (peek id+attrs)
+        id+attrs-key (id+attrs->key id+attrs)
         ;; update session
         session (case kind
                   (:insert :update)
                   (as-> session $
-                        (update-in $ node-path assoc-in [:matches id+attrs]
-                                   (->Match vars enabled?))
+                        (update-in $ node-path assoc-in [:matches id+attrs-key]
+                                   (->Match vars enabled? id+attrs))
                         (if (and leaf-node? (:trigger node))
                           (cond-> $
                                   (:then-fn node)
-                                  (update :then-queue conj [node-id id+attrs])
+                                  (update :then-queue conj [node-id id+attrs-key])
                                   (:then-finally-fn node)
                                   (update :then-finally-queue conj node-id))
                           $)
@@ -390,7 +394,7 @@ This is no longer necessary, because it is accessible via `match` directly."}
                                    conj id+attr))
                   :retract
                   (as-> session $
-                        (update-in $ node-path update :matches dissoc id+attrs)
+                        (update-in $ node-path update :matches dissoc id+attrs-key)
                         (if (and leaf-node? (:then-finally-fn node))
                           (update $ :then-finally-queue conj node-id)
                           $)
@@ -404,7 +408,7 @@ This is no longer necessary, because it is accessible via `match` directly."}
   (let [{:keys [condition child-id id-key] :as node} (get-in session [:beta-nodes node-id])]
     (if-let [parent-id (:parent-id node)]
       (reduce-kv
-        (fn [session id+attrs {existing-vars :vars}]
+        (fn [session _ {existing-vars :vars id+attrs :id+attrs}]
           ;; SHORTCUT: if we know the id, compare it with the token right away
           (if (some->> id-key (get existing-vars) (not= (:id fact)))
             session
@@ -610,9 +614,9 @@ This is no longer necessary, because it is accessible via `match` directly."}
              beta-nodes (:beta-nodes session)
              ;; execute :then functions
              session (reduce
-                       (fn [session [node-id id+attrs]]
+                       (fn [session [node-id id+attrs-key]]
                          (let [{:keys [matches then-fn]} (get beta-nodes node-id)]
-                           (or (when-let [{:keys [vars enabled]} (get matches id+attrs)]
+                           (or (when-let [{:keys [vars enabled]} (get matches id+attrs-key)]
                                  (when enabled
                                    (binding [*session* session
                                              *mutable-session* (volatile! session)
