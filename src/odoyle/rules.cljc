@@ -107,6 +107,7 @@ This is no longer necessary, because it is accessible via `match` directly."}
                       opts ;; map of options
                       ])
 (defrecord Rule [name ;; keyword
+                 rule-hash
                  conditions ;; vector of Condition
                  what-fn ;; fn
                  when-fn ;; fn
@@ -139,6 +140,14 @@ This is no longer necessary, because it is accessible via `match` directly."}
       (add-to-condition :attr attr)
       (add-to-condition :value value)))
 
+(defn rule-hash [parsed-rule]
+  ;; use count on then and then-finally-block 
+  ;; because #js tag makes the hash always different
+  (hash [(:what-block parsed-rule)
+         (:when-block parsed-rule)
+         (count (:then-block parsed-rule))
+         (count (:then-finally-block parsed-rule))]))
+
 (defn ->rule
   "Returns a new rule. In most cases, you should use the `ruleset` macro to define rules,
   but if you want to define rules dynamically, you can use this function instead.
@@ -156,7 +165,7 @@ This is no longer necessary, because it is accessible via `match` directly."}
                              (:then-finally parsed-rule)
                              (assoc-in [:then-finally-block :body] (:then-finally parsed-rule)))
          {:keys [rule-name conditions when-body then-body then-finally-body]} (->rule [rule-name parsed-rule])]
-     (->Rule rule-name (mapv map->Condition conditions) nil when-body then-body then-finally-body)))
+     (->Rule rule-name -1 (mapv map->Condition conditions) nil when-body then-body then-finally-body)))
   ([[rule-name parsed-rule]]
    (let [{:keys [what-block when-block then-block then-finally-block]} parsed-rule
          conditions (mapv ->condition (:body what-block))
@@ -171,6 +180,7 @@ This is no longer necessary, because it is accessible via `match` directly."}
                    set
                    vec)]
      {:rule-name rule-name
+      :rule-hash (rule-hash parsed-rule)
       :fn-name (-> (str (namespace rule-name) "-" (name rule-name))
                    (str/replace "." "-")
                    symbol)
@@ -747,8 +757,9 @@ This is no longer necessary, because it is accessible via `match` directly."}
   "Returns a vector of rules after transforming the given map."
   [rules]
   (reduce
-    (fn [v {:keys [rule-name fn-name conditions when-body then-body then-finally-body arg]}]
+    (fn [v {:keys [rule-name rule-hash fn-name conditions when-body then-body then-finally-body arg]}]
       (conj v `(->Rule ~rule-name
+                       ~rule-hash
                        (mapv map->Condition ~conditions)
                        nil
                        ~(when (some? when-body) ;; need some? because it could be `false`
