@@ -187,7 +187,7 @@ This is no longer necessary, because it is accessible via `match` directly."}
                           (distinct))
                     conditions)]
      {:rule-name rule-name
-      :fn-name (symbol (str (pseudo-munge (namespace rule-name)) \- (name rule-name)))
+      :fn-name (str (pseudo-munge (namespace rule-name)) \- (name rule-name))
       :conditions conditions
       :arg {:keys syms :as 'match}
       :when-body (cond
@@ -811,11 +811,11 @@ This is no longer necessary, because it is accessible via `match` directly."}
                             ~conditions
                             nil
                             ~(when (some? when-body) ;; need some? because it could be `false`
-                               `(fn ~fn-name [~'session ~arg] ~when-body))
+                               `(defn ~(symbol (str fn-name "-when")) [~'session ~arg] ~when-body))
                             ~(when then-body
-                               `(fn ~fn-name [~'session ~arg] ~@then-body))
+                               `(defn ~(symbol (str fn-name "-then")) [~'session ~arg] ~@then-body))
                             ~(when then-finally-body
-                               `(fn ~fn-name [~'session] ~@then-finally-body)))))
+                               `(defn ~(symbol (str fn-name "-then-finally")) [~'session] ~@then-finally-body)))))
    []
    (mapv ->rule (parse-rules rules))))
 
