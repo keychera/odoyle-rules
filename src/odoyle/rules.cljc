@@ -214,39 +214,6 @@ This is no longer necessary, because it is accessible via `match` directly."}
           (update node :children conj (add-alpha-node new-node other-nodes *alpha-node-path))))
       node)))
 
-(defn hoare-partition
-  [coll lo hi comp-fn]
-  (let [pivot (nth coll lo)]
-    (loop [coll' coll i (dec lo) j (inc hi)]
-      (let [i'' (loop [i' (inc i)]
-                  (if (< (comp-fn (nth coll' i') pivot) 0)
-                    (recur (inc i'))
-                    i'))
-            j'' (loop [j' (dec j)]
-                  (if (> (comp-fn (nth coll' j') pivot) 0)
-                    (recur (dec j'))
-                    j'))]
-        (if (>= i'' j'')
-          [coll' j'']
-          (let [ival (nth coll' i'')
-                jval (nth coll' j'')]
-            (recur (-> coll'
-                       (assoc i'' jval)
-                       (assoc j'' ival))
-                   i'' j'')))))))
-
-(defn quicksort [coll lo hi comp-fn]
-  (if (and (>= lo 0) (>= hi 0) (< lo hi))
-    (let [[coll' p] (hoare-partition coll lo hi comp-fn)]
-      (-> coll'
-          (quicksort lo p comp-fn)
-          (quicksort (inc p) hi comp-fn)))
-    coll))
-
-(defn temp-sort
-  ([comp-fn coll]
-   (quicksort coll 0 (dec (count coll)) comp-fn)))
-
 (defn- is-ancestor [session node-id1 node-id2]
   (loop [node-id node-id2]
     (if-let [parent-id (:parent-id (get-in session [:beta-nodes node-id]))]
@@ -254,14 +221,6 @@ This is no longer necessary, because it is accessible via `match` directly."}
         1
         (recur parent-id))
       -1)))
-
-(defn total-order-ancestor [session id1 id2]
-  (if (= id1 id2)
-    0
-    (cond
-      (= (is-ancestor session id1 id2) 1) -1
-      (= (is-ancestor session id2 id1) 1)  1
-      :else (compare id1 id2))))
 
 (defn- add-condition [session condition]
   (let [*alpha-node-path (volatile! [:alpha-node])
@@ -297,7 +256,7 @@ This is no longer necessary, because it is accessible via `match` directly."}
         successor-ids (conj (:successors (get-in session alpha-node-path))
                             join-node-id)
         ;; successors must be sorted by ancestry (descendents first) to avoid duplicate rule firings
-        successor-ids (apply vector (temp-sort (fn [a b] (total-order-ancestor session a b)) successor-ids))]
+        successor-ids (vec (sort (partial is-ancestor session) successor-ids))]
     (-> session
         (update-in alpha-node-path assoc :successors successor-ids)
         (cond-> parent-mem-node-id
